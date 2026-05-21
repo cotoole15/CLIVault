@@ -30,11 +30,8 @@ def generate_key(password, salt=None):
         iterations=1_200_000,
     )
     # Cryptography expects a password in bytes, converted below.
-    password = password.encode()
-
-    key = kdf.derive(password)
-
-    return key.hex()
+    key = kdf.derive(password.encode())
+    return base64.urlsafe_b64encode(key)
 
 
 # An interactive  function to take input and run mkdb, which handles database creation.
@@ -52,16 +49,46 @@ def setup_db():
         else:
             input("Password set. Press enter.")
             print("Creating database....")
+            mkdb(name, password)
 
             break
 
 
 def mkdb(name, password):
     salt = os.urandom(16)
-    key = generate_key(salt)
+    key = generate_key(password, salt)
+    # Create fernet object
+    fernet = Fernet(key)
+
+    # encrypt the word true, to see if the database has been unlocked
+    decrypted = fernet.encrypt("true")
     conn = sqlite3.connect(name)
     cursor = conn.cursor()
-    pass
+    # Create metadata
+    cursor.execute(
+        """ Create TABLE metadata (
+        salt BLOB,
+        decrypted TEXT DEFAULT ? 
+    );
+    """,
+        (decrypted,),
+    )
+    cursor.execute("INSERT INTO metadata (salt) VALUES (?)", (salt,))
+    cursor.execute("""CREATE TABLE passwords(
+        name TEXT,
+        email TEXT,
+        username TEXT,
+        password BLOB,
+        url text
+        );
+    """)
+    try:
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"Error creating database: {e}")
+
+    print("Successfully created database")
+    conn.close()
 
 
 def open_db():
