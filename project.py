@@ -148,7 +148,6 @@ def main(stdscr):
         stdscr.move(index + 1, 0)
         stdscr.refresh()
 
-        stdscr.refresh()
         key = stdscr.getkey()
         if key == "KEY_DOWN":
             if index < 2:
