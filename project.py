@@ -12,7 +12,10 @@ from curses import wrapper
 
 
 def validate_pass(password, retyped_password):
-    return password == retyped_password
+    if password != retyped_password:
+        raise ValueError("Passwords don't amtch")
+    if password == "":
+        raise ValueError("Password must not be empty")
 
 
 def generate_key(password, salt=None):
@@ -35,23 +38,56 @@ def generate_key(password, salt=None):
 
 
 # An interactive  function to take input and run mkdb, which handles database creation.
-def setup_db():
+def prompt_db():
     input(
         "On the next screen, you will be asked to select the name and location for your new database.\nPlease press enter to continue."
     )
-    name = input("Enter a name for your new database:")
+    name = None
+    while not (name):
+        name = input("Enter a name for your new database:")
+        if not (name):
+            print("Name cannot be empty")
+        else:
+            break
+
+    name = name + ".db"
+    if os.path.exists(name):
+        print(
+            "There is already a database with that name, do you want to overwrite it?"
+        )
+        answer = input("Please type YES in upper case letters to continue")
+        if answer != "YES":
+            print("Database creation cancelled")
+            input("Press enter to return to the menu")
+            wrapper(main)
+        else:
+            os.remove(name)
+            print("removed " + name)
+
     while True:
         password = getpass.getpass("Enter the password for your new database.")
         retyped_password = getpass.getpass("Please enter the same password again:")
 
-        if not (validate_pass(password, retyped_password)):
-            print("Passwords don't match, try again.")
+        try:
+            validate_pass(password, retyped_password)
+        except ValueError as e:
+
+            print("e")
+            continue
         else:
             input("Password set. Press enter.")
-            print("Creating database....")
-            mkdb(name, password)
 
             break
+    print("Creating database....")
+    try:
+        mkdb(name, password)
+
+    except sqlite3.Error as e:
+        print("Error creating database: \n" + str(e))
+        input("Press enter to continue")
+        prompt_db()
+    print("Successfully created new database")
+    input("Press enter to continue")
 
 
 def mkdb(name, password):
@@ -61,33 +97,26 @@ def mkdb(name, password):
     fernet = Fernet(key)
 
     # encrypt the word true, to see if the database has been unlocked
-    decrypted = fernet.encrypt("true")
+    s = fernet.encrypt("true".encode())
     conn = sqlite3.connect(name)
     cursor = conn.cursor()
     # Create metadata
-    cursor.execute(
-        """ Create TABLE metadata (
+    cursor.execute(""" Create TABLE metadata (
         salt BLOB,
-        decrypted TEXT DEFAULT ? 
+        is_unlocked TEXT  
     );
-    """,
-        (decrypted,),
-    )
-    cursor.execute("INSERT INTO metadata (salt) VALUES (?)", (salt,))
-    cursor.execute("""CREATE TABLE passwords(
-        name TEXT,
-        email TEXT,
-        username TEXT,
-        password BLOB,
-        url text
-        );
     """)
-    try:
-        conn.commit()
-    except sqlite3.Error as e:
-        print(f"Error creating database: {e}")
+    cursor.execute("INSERT INTO metadata (salt) VALUES (?)", (salt,))
+    cursor.execute("INSERT INTO metadata (is_unlocked) VALUES (?)", (s,))
 
-    print("Successfully created database")
+    cursor.execute("""create TABLE passwords(
+        name TEXT,
+        email TEXT,
+        username TEXT,
+        password BLOB,
+        url TEXT
+    );""")
+    conn.commit()
     conn.close()
 
 
@@ -97,7 +126,7 @@ def open_db():
 
 def main(stdscr):
     menu_items = [
-        ("Create new database", setup_db),
+        ("Create new database", prompt_db),
         ("Open an existing database", open_db),
         ("quit", sys.exit),
     ]
@@ -131,11 +160,11 @@ def main(stdscr):
         if key == "Key_ENTER" or key == "\n" or key == "\r":
             curses.nocbreak()
             stdscr.keypad(False)
+
             stdscr.clear()
 
-            # curses.endwin()
             menu_items[index][1]()
-            break
+            return
 
 
 if __name__ == "__main__":
