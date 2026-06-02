@@ -3,6 +3,7 @@ import getpass  # For capturing password input.
 import base64
 import os
 import glob
+import cryptography
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -24,7 +25,10 @@ class Entry:
 def decrypt(key, bytes):
     fernet = Fernet(key)
 
-    return fernet.decrypt(bytes).decode()
+    try:
+        return fernet.decrypt(bytes).decode()
+    except cryptography.exceptions.InvalidSignature:
+        raise ValueError("Wrong password")
 
 
 def build_entries(cursor):
@@ -198,12 +202,24 @@ def mkdb(name, password):
     cursor = conn.cursor()
     # Create metadata
     cursor.execute(""" Create TABLE metadata (
-        salt BLOB,
-        is_unlocked BLOB  
+        key TEXT,
+        value BLOB
     );
     """)
-    cursor.execute("INSERT INTO metadata (salt) VALUES (?)", (salt,))
-    cursor.execute("INSERT INTO metadata (is_unlocked) VALUES (?)", (s,))
+    cursor.execute(
+        "INSERT INTO metadata (key,value) VALUES (?,?)",
+        (
+            "salt",
+            salt,
+        ),
+    )
+    cursor.execute(
+        "INSERT INTO metadata (key,value) VALUES (?,?)",
+        (
+            "is_unlocked",
+            s,
+        ),
+    )
 
     cursor.execute("""create TABLE passwords(
         name TEXT,
@@ -224,19 +240,20 @@ def open_db(path, password):
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT salt FROM metadata;
+        SELECT value FROM metadata WHERE key="salt";
     """)
-    # fetch a tuple containing the salt
-    result = cursor.fetchone()
+    salt = cursor.fetchone()[0]
 
-    salt = result[0]
     key = generate_key(password, salt)
     cursor.execute("""
-        SELECT is_unlocked FROM metadata
-        LIMIT 1 OFFSET 1;    
+        SELECT value FROM metadata
+        WHERE key="is_unlocked";    
     """)
     is_unlocked = cursor.fetchone()[0]
-    is_unlocked = decrypt(key, is_unlocked)
+    try:
+        is_unlocked = decrypt(key, is_unlocked)
+    except (cryptography.exceptions.InvalidSignature, cryptography.fernet.InvalidToken):
+        raise ValueError("Wrong password")
     if is_unlocked == "true":
         return cursor
     else:
