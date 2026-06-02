@@ -2,6 +2,7 @@
 import getpass  # For capturing password input.
 import base64
 import os
+import glob
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -9,6 +10,101 @@ import sys
 import sqlite3
 import curses
 from curses import wrapper
+
+
+class Entry:
+    def __init__(self, name, username, password, email=None, url=None):
+        self.name = name
+        self.username = username
+        self.password = password
+        self.url = url
+        self.email = email
+
+
+def decrypt(key, bytes):
+    fernet = Fernet(key)
+
+    return fernet.decrypt(bytes).decode()
+
+
+def build_entries(cursor):
+    input(
+        "This code does not exist yet. But if you got here, the database was unlocked."
+    )
+
+
+def encrypt(key, s):
+    fernet = Fernet(key)
+    return fernet.encrypt(s.encode())
+
+
+def quit(stdscr):
+    print("Goodbye, thanks for trying out my program!")
+    input("Press enter to exit")
+    sys.exit(0)
+
+
+def open_db_interactive(stdscr):
+    # This reuses the curses code that I implemented in main
+    options = []
+    options.append("Enter path to database")
+    databases = glob.glob("*.db")
+    options = options + databases
+
+    index = 0
+    path = None
+    curses.noecho()
+    curses.cbreak()
+    stdscr.keypad(True)
+
+    while True:
+        stdscr.clear()
+
+        stdscr.addstr("Choose database to open: \n", curses.A_BOLD)
+
+        for i, option in enumerate(options):
+            if i == index:
+                stdscr.addstr(f"* {option}\n", curses.A_REVERSE)
+
+            else:
+                stdscr.addstr(f"{option}\n")
+        stdscr.move(index + 1, 0)
+        stdscr.refresh()
+
+        key = stdscr.getkey()
+        if key == "KEY_DOWN":
+
+            if index + 1 < len(options):
+                index += 1
+            else:
+                index = 0
+
+        elif key == "KEY_UP":
+            if index > 0:
+                index -= 1
+        if key == "Key_ENTER" or key == "\n" or key == "\r":
+            curses.nocbreak()
+            stdscr.keypad(False)
+
+            stdscr.clear()
+            curses.endwin()
+            if index == 0:
+                path = input("Enter path:")
+                break
+            else:
+                path = option
+                break
+    while True:
+        password = input("Enter password")
+        try:
+            cursor = open_db(path, password)
+        except ValueError as e:
+            print(e)
+            continue
+        except FileNotFoundError:
+            print(e)
+            continue
+        build_entries(cursor)
 
 
 def validate_pass(password, retyped_password):
@@ -38,7 +134,7 @@ def generate_key(password, salt=None):
 
 
 # An interactive  function to take input and run mkdb, which handles database creation.
-def prompt_db():
+def prompt_db(stdscr):
     input(
         "On the next screen, you will be asked to select the name and location for your new database.\nPlease press enter to continue."
     )
@@ -72,7 +168,7 @@ def prompt_db():
             validate_pass(password, retyped_password)
         except ValueError as e:
 
-            print("e")
+            print(e)
             continue
         else:
             input("Password set. Press enter.")
@@ -103,7 +199,7 @@ def mkdb(name, password):
     # Create metadata
     cursor.execute(""" Create TABLE metadata (
         salt BLOB,
-        is_unlocked TEXT  
+        is_unlocked BLOB  
     );
     """)
     cursor.execute("INSERT INTO metadata (salt) VALUES (?)", (salt,))
@@ -120,15 +216,38 @@ def mkdb(name, password):
     conn.close()
 
 
-def open_db():
-    print("executed")
+def open_db(path, password):
+    if not (os.path.exists(path)):
+        raise FileNotFoundError(f"The file at {path} does not exist")
+
+    conn = sqlite3.connect(path)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT salt FROM metadata;
+    """)
+    # fetch a tuple containing the salt
+    result = cursor.fetchone()
+
+    salt = result[0]
+    key = generate_key(password, salt)
+    cursor.execute("""
+        SELECT is_unlocked FROM metadata
+        LIMIT 1 OFFSET 1;    
+    """)
+    is_unlocked = cursor.fetchone()[0]
+    is_unlocked = decrypt(key, is_unlocked)
+    if is_unlocked == "true":
+        return cursor
+    else:
+        raise ValueError("wrong password")
 
 
 def main(stdscr):
     menu_items = [
-        ("Create new database", prompt_db),
-        ("Open an existing database", open_db),
-        ("quit", sys.exit),
+        ("Create new database", prompt_db, stdscr),
+        ("Open an existing database", open_db_interactive, stdscr),
+        ("quit", quit, stdscr),
     ]
     curses.noecho()
     curses.cbreak()  # Allow for responding to keys without hitting enter.
@@ -162,7 +281,7 @@ def main(stdscr):
 
             stdscr.clear()
 
-            menu_items[index][1]()
+            menu_items[index][1](menu_items[index][2])
             return
 
 
