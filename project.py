@@ -22,19 +22,86 @@ class Entry:
         self.email = email
 
 
+def manage_entry(entry):
+
+    input("entries.name")
+
+
+def manage_entries(cursor, stdscr, entries):
+    index = 0
+    changed = False
+    curses.noecho()
+    curses.cbreak()
+    stdscr.keypad(True)
+    stdscr.clear()
+
+    while True:
+        options = []
+        for entry in entries:
+            options.append(entry)
+        options.append("Add entry")
+        options.append("quit")
+
+        stdscr.clear()
+        stdscr.addstr(f"showing {len(entries)} Passwords:\n", curses.A_BOLD)
+
+        for i, option in enumerate(options):
+            if i == index:
+                stdscr.addstr(f"* {option}\n", curses.A_REVERSE)
+
+            else:
+                stdscr.addstr(f"{option}\n")
+        stdscr.move(index + 1, 0)
+        stdscr.refresh()
+
+        key = stdscr.getkey()
+        if key == "KEY_DOWN":
+            if index < len(options) - 1:
+                index += 1
+
+        elif key == "KEY_UP":
+            if index > 0:
+                index -= 1
+        if key == "Key_ENTER" or key == "\n" or key == "\r":
+            curses.nocbreak()
+            stdscr.keypad(False)
+            curses.endwin()
+            break
+
+    if index == len(options) - 2:
+        prompt_add_entry(entries)
+
+    elif index == len(options) - 1:
+        prompt_save(cursor, entries)
+    else:
+        entry = options[index]
+        manage_entry(entry, stdscr)
+
+
 def decrypt(key, bytes):
     fernet = Fernet(key)
 
     try:
         return fernet.decrypt(bytes).decode()
-    except cryptography.exceptions.InvalidSignature:
+    except (cryptography.exceptions.InvalidSignature, cryptography.fernet.InvalidToken):
         raise ValueError("Wrong password")
 
 
 def build_entries(cursor):
-    input(
-        "This code does not exist yet. But if you got here, the database was unlocked."
-    )
+    entries = []
+    cursor.execute("SELECT * FROM passwords")
+    rows = cursor.fetchall()
+
+    for row in rows:
+        name = row[0]
+        email = rows[1]
+        username = row[2]
+        password = row[3].decode("utf-8")
+        url = row[4]
+
+        entry = Entry(name, username, password, email, url)
+        entries.append(entry)
+    return entries
 
 
 def encrypt(key, s):
@@ -108,7 +175,9 @@ def open_db_interactive(stdscr):
         except FileNotFoundError:
             print(e)
             continue
-        build_entries(cursor)
+        break
+    entries = build_entries(cursor)
+    manage_entries(cursor, stdscr, entries)
 
 
 def validate_pass(password, retyped_password):
