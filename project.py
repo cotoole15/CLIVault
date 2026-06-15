@@ -22,6 +22,7 @@ class Entry:
         email=None,
         url=None,
         creating=False,
+        changed=False,
     ):
         if not (creating):
             if name is None:
@@ -33,6 +34,7 @@ class Entry:
         self.password = password
         self.url = url
         self.email = email
+        self.changed = changed
 
     def __str__(self):
         return self.name
@@ -67,7 +69,12 @@ def generate_editing_options(entry):
     return options
 
 
-def save_entry(new_entry, entries):
+def prompt_save(cursor, key, entries, changed_entries):
+    if not (changed_entries):
+        cursor.close()
+
+
+def save_entry(new_entry, entries, changed_entries):
     if new_entry is None:
         raise ValueError("No entry provided")
     if entries is None:
@@ -75,11 +82,19 @@ def save_entry(new_entry, entries):
 
     found = False
     for i, entry in enumerate(entries):
-        if new_entry == entry:
+        if new_entry == entry and new_entry.changed:
+            # REset changed state
+            new_entry.changed = False
+            changed_entries.append(new_entry.name)
+
             entries[i] = new_entry
+
             found = True
             break
     if not (found):
+        new_entry.changed = False
+        changed_entries.append(new_entry.name)
+
         entries.append(new_entry)
 
 
@@ -89,6 +104,7 @@ def set_username(entry):
         input("Username unchanged, press enter to return to entry creation")
     else:
         entry.username = username
+        entry.changed = True
 
 
 def set_password(entry):
@@ -102,6 +118,7 @@ def set_password(entry):
             continue
         break
     entry.password = new_password
+    entry.changed = True
 
 
 def set_name(entry):
@@ -110,6 +127,7 @@ def set_name(entry):
         input("Name unchanged, press enter to return to entry creation")
     else:
         entry.name = name
+        entry.changed = True
 
 
 def set_email(entry):
@@ -118,6 +136,7 @@ def set_email(entry):
         input("email unchanged, press enter to return to entry creation")
     else:
         entry.email = email
+        entry.changed = True
 
 
 def set_url(entry):
@@ -126,9 +145,10 @@ def set_url(entry):
         input("URL unchanged, press enter to return to entry creation")
     else:
         entry.url = url
+        entry.changed = True
 
 
-def add_or_update(stdscr, entry=None, entries=None):
+def add_or_update(stdscr, entry=None, entries=None, changed_entries=None):
     if entries is None:
         raise ValueError("No entries provided")
 
@@ -175,10 +195,11 @@ def add_or_update(stdscr, entry=None, entries=None):
             option = options[index]
             label, function, value = option
             if label == "Cancel":
+
                 return
             elif label == "Save changes":
                 try:
-                    save_entry(entry, entries)
+                    save_entry(entry, entries, changed_entries)
                 except ValueError as e:
                     input(f"Couldn't save entry: {e}")
                     continue
@@ -193,7 +214,7 @@ def add_or_update(stdscr, entry=None, entries=None):
 
 def manage_entries(cursor, stdscr, entries):
     index = 0
-    changed = False
+    changed_entries = []
     curses.noecho()
     curses.cbreak()
     stdscr.keypad(True)
@@ -233,15 +254,15 @@ def manage_entries(cursor, stdscr, entries):
             curses.endwin()
 
             if index == len(options) - 2:
-                add_or_update(stdscr, None, entries)
+                add_or_update(stdscr, None, entries, changed_entries)
                 continue
 
             elif index == len(options) - 1:
-                prompt_save(cursor, entries)
+                prompt_save(cursor, key, entries, changed_entries)
                 break
             else:
                 entry = options[index]
-                add_or_update(stdscr, entry, entries)
+                add_or_update(stdscr, entry, entries, changed_entries)
                 continue
 
 
@@ -254,19 +275,20 @@ def decrypt(key, bytes):
         raise ValueError("Wrong password")
 
 
-def build_entries(cursor):
+def build_entries(cursor, key):
+
     entries = []
     cursor.execute("SELECT * FROM passwords")
     rows = cursor.fetchall()
 
     for row in rows:
-        name = row[0]
-        email = rows[1]
-        username = row[2]
-        password = row[3].decode("utf-8")
-        url = row[4]
+        name = decrypt(key, row[0].encode())
+        email = decrypt(key, rows[1].encode())
+        username = decrypt(key, row[2].encode())
+        password = decrypt(key, row[3])
+        url = decrypt(key, row[4].encode())
 
-        entry = Entry(name, username, password, email, url)
+        entry = Entry(name, username, password, email, url, False)
         entries.append(entry)
     return entries
 
@@ -336,7 +358,7 @@ def open_db_interactive(stdscr):
     while True:
         password = getpass.getpass("Enter password:")
         try:
-            cursor = open_db(path, password)
+            cursor, key = open_db(path, password)
         except ValueError as e:
             print(e)
             continue
@@ -344,7 +366,7 @@ def open_db_interactive(stdscr):
             print(e)
             continue
         break
-    entries = build_entries(cursor)
+    entries = build_entries(cursor, key)
     manage_entries(cursor, stdscr, entries)
 
 
@@ -492,7 +514,7 @@ def open_db(path, password):
     except (cryptography.exceptions.InvalidSignature, cryptography.fernet.InvalidToken):
         raise ValueError("Wrong password")
     if is_unlocked == "true":
-        return cursor
+        return (cursor, key)
     else:
         raise ValueError("wrong password")
 
