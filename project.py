@@ -14,7 +14,20 @@ from curses import wrapper
 
 
 class Entry:
-    def __init__(self, name, username, password, email=None, url=None):
+    def __init__(
+        self,
+        name=None,
+        username=None,
+        password=None,
+        email=None,
+        url=None,
+        creating=False,
+    ):
+        if not (creating):
+            if name is None:
+                raise ValueError("No name provided")
+            if password is None:
+                raise ValueError("NO password provided")
         self.name = name
         self.username = username
         self.password = password
@@ -22,9 +35,162 @@ class Entry:
         self.email = email
 
 
+def generate_editing_options(entry):
+    options = (
+        [
+            f"Title: {entry.name if entry.name is not None else 'not set'}",
+            set_name,
+            entry,
+        ],
+        [
+            f"Username: {entry.username if entry.username is not None else 'Not set'}",
+            set_username,
+            entry,
+        ],
+        [
+            f"Password: {'*' * len(entry.password) if entry.password is not None else 'not set'}",
+            set_password,
+            entry,
+        ],
+        [
+            f"e-mail: {entry.email if entry.email is not None else 'Not set'}",
+            set_email,
+            entry,
+        ],
+        [f"URL: {entry.url if entry.url is not None else 'Not set'}", set_url, entry],
+        ["Cancel", None, None],
+        ["Save changes", None, None],
+    )
+    return options
+
+
+def save_entry(new_entry, entries):
+    if entry is None:
+        raise ValueError("No entry provided")
+    if entries is None:
+        raise ValueError("No entries provided")
+
+    found = False
+    for i, entry in enumerate(entries):
+        if new_entry.name == entry.name:
+            entries[i] = new_entry
+            found = True
+            break
+        if not (found):
+            entries.append(new_entry)
+
+
+def set_username(entry):
+    username = input("Enter new username")
+    if username == "":
+        input("Username unchanged, press enter to return to entry creation")
+    else:
+        entry.username = username
+
+
+def set_password(entry):
+    while True:
+        new_password = getpass.getpass("Enter new password")
+        retyped = input("Retype new password")
+        try:
+            validate_pass(new_password, retyped)
+        except ValueError as e:
+            print(e)
+            continue
+        break
+    entry.password = new_password
+
+
+def set_name(entry):
+    name = input("Enter a name for this entry:")
+    if name == "":
+        input("Name unchanged, press enter to return to entry creation")
+    else:
+        entry.name = name
+
+
+def set_email(entry):
+    email = input("Enter an e-mail address")
+    if email == "":
+        input("email unchanged, press enter to return to entry creation")
+    else:
+        entry.email = email
+
+
+def set_url(entry):
+    url = input("Enter URL:")
+    if url == "":
+        input("URL unchanged, press enter to return to entry creation")
+    else:
+        entry.url = url
+
+
+def add_or_update(stdscr, entry=None, entries=None):
+    if entries is None:
+        raise ValueError("No entries provided")
+
+    if entry is None:
+        entry = Entry(None, None, None, None, None, True)
+
+    curses.noecho()
+    curses.cbreak()
+    stdscr.keypad(True)
+    stdscr.clear()
+    index = 0
+    option = None
+    options = generate_editing_options(entry)
+
+    while True:
+
+        stdscr.clear()
+        stdscr.refresh()
+        stdscr.addstr(
+            f"{'Create new entry:\n' if entry is None else 'Edit entry:\n'}",
+            curses.A_BOLD,
+        )
+        for i, (label, functionin, value) in enumerate(options):
+            if i == index:
+                stdscr.addstr(f"* {label}\n", curses.A_REVERSE)
+
+            else:
+                stdscr.addstr(f"{label}\n")
+        stdscr.move(index + 1, 0)
+        stdscr.refresh()
+
+        key = stdscr.getkey()
+        if key == "KEY_DOWN":
+            if index < len(options) - 1:
+                index += 1
+
+        elif key == "KEY_UP":
+            if index > 0:
+                index -= 1
+        if key == "Key_ENTER" or key == "\n" or key == "\r":
+            stdscr.clear()
+
+            curses.endwin()
+            option = options[index]
+            label, function, value = option
+            if label == "Cancel":
+                return
+            elif label == "Save changes":
+                try:
+                    save_entry(entry, entries)
+                except ValueError as e:
+                    input(f"Couldn't save entry: {e}")
+                    continue
+                return
+            else:
+                function(value)
+                options = generate_editing_options(entry)
+
+                curses.initscr()
+                continue
+
+
 def manage_entry(entry):
 
-    input("entries.name")
+    pass
 
 
 def manage_entries(cursor, stdscr, entries):
@@ -69,13 +235,14 @@ def manage_entries(cursor, stdscr, entries):
             break
 
     if index == len(options) - 2:
-        prompt_add_entry(entries)
+        entry = options[index]
+        new_entry = add_or_update(stdscr, None, entries)
 
     elif index == len(options) - 1:
         prompt_save(cursor, entries)
     else:
         entry = options[index]
-        manage_entry(entry, stdscr)
+        entry = add_or_update(stdscr, entry, entries)
 
 
 def decrypt(key, bytes):
@@ -158,6 +325,7 @@ def open_db_interactive(stdscr):
             stdscr.keypad(False)
 
             stdscr.clear()
+            stdscr.refresh()
             curses.endwin()
             if index == 0:
                 path = input("Enter path:")
@@ -166,7 +334,7 @@ def open_db_interactive(stdscr):
                 path = option
                 break
     while True:
-        password = input("Enter password")
+        password = getpass.getpass("Enter password:")
         try:
             cursor = open_db(path, password)
         except ValueError as e:
@@ -366,6 +534,7 @@ def main(stdscr):
             stdscr.keypad(False)
 
             stdscr.clear()
+            stdscr.refresh()
 
             menu_items[index][1](menu_items[index][2])
             return
