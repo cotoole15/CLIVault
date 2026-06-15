@@ -34,6 +34,9 @@ class Entry:
         self.url = url
         self.email = email
 
+    def __str__(self):
+        return self.name
+
 
 def generate_editing_options(entry):
     options = (
@@ -65,19 +68,19 @@ def generate_editing_options(entry):
 
 
 def save_entry(new_entry, entries):
-    if entry is None:
+    if new_entry is None:
         raise ValueError("No entry provided")
     if entries is None:
         raise ValueError("No entries provided")
 
     found = False
     for i, entry in enumerate(entries):
-        if new_entry.name == entry.name:
+        if new_entry == entry:
             entries[i] = new_entry
             found = True
             break
-        if not (found):
-            entries.append(new_entry)
+    if not (found):
+        entries.append(new_entry)
 
 
 def set_username(entry):
@@ -188,11 +191,6 @@ def add_or_update(stdscr, entry=None, entries=None):
                 continue
 
 
-def manage_entry(entry):
-
-    pass
-
-
 def manage_entries(cursor, stdscr, entries):
     index = 0
     changed = False
@@ -213,6 +211,7 @@ def manage_entries(cursor, stdscr, entries):
 
         for i, option in enumerate(options):
             if i == index:
+
                 stdscr.addstr(f"* {option}\n", curses.A_REVERSE)
 
             else:
@@ -228,21 +227,22 @@ def manage_entries(cursor, stdscr, entries):
         elif key == "KEY_UP":
             if index > 0:
                 index -= 1
-        if key == "Key_ENTER" or key == "\n" or key == "\r":
+        elif key == "Key_ENTER" or key == "\n" or key == "\r":
             curses.nocbreak()
             stdscr.keypad(False)
             curses.endwin()
-            break
 
-    if index == len(options) - 2:
-        entry = options[index]
-        new_entry = add_or_update(stdscr, None, entries)
+            if index == len(options) - 2:
+                add_or_update(stdscr, None, entries)
+                continue
 
-    elif index == len(options) - 1:
-        prompt_save(cursor, entries)
-    else:
-        entry = options[index]
-        entry = add_or_update(stdscr, entry, entries)
+            elif index == len(options) - 1:
+                prompt_save(cursor, entries)
+                break
+            else:
+                entry = options[index]
+                add_or_update(stdscr, entry, entries)
+                continue
 
 
 def decrypt(key, bytes):
