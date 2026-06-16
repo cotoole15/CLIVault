@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import getpass  # For capturing password input.
+
 import base64
 import os
 import glob
@@ -40,11 +40,37 @@ class Entry:
         return self.name
 
 
+def decrypt_entry(row, key):
+    if not (row):
+        raise ValueError("No row provided")
+    if not (key):
+        raise ValueError("NO decryption key provided")
+
+    name = decrypt(key, row[0].encode()) if row[0] else None
+    email = decrypt(key, row[1].encode()) if row[1] else None
+    username = decrypt(key, row[2].encode()) if row[2] else None
+    password = decrypt(key, row[3]) if row[3] else None
+    url = decrypt(key, row[4].encode()) if row[4] else None
+    dec_entry = Entry(name, username, password, email, url, False, False)
+    return dec_entry
+
+
+def prompt(stdscr, text):
+
+    # Show typed characters
+    curses.echo()
+    stdscr.keypad(False)
+
+    stdscr.addstr(text)
+    typed_text = stdscr.getstr().decode()
+    curses.noecho()
+    stdscr.keypad(True)
+    return typed_text
+
+
 def encrypt_entries(conn, cursor, key, entries):
 
     # recursively encrypt the contents of each entry
-    print(type(key))
-    input()
 
     for e in entries:
         # encode each variable into bytes and then encrypt and decode it back into a string, accept for the password
@@ -73,6 +99,7 @@ def save_entries(conn, cursor, key, entries):
 
 
 def generate_editing_options(entry):
+    # This generates the list of entries and exit options to be used by add_or_update
     options = (
         [
             f"Title: {entry.name if entry.name is not None else 'not set'}",
@@ -101,20 +128,22 @@ def generate_editing_options(entry):
     return options
 
 
-def prompt_save(conn, cursor, key, entries, changed_entries):
+def prompt_save(stdscr, conn, cursor, key, entries, changed_entries):
     if not (changed_entries):
-
+        # Close without saving anything
         cursor.close()
         conn.close()
     else:
-        print("You have changed the following entries:\n")
+        stdscr.clear()
+        stdscr.addstr("You have changed the following entries:\n")
         for name in changed_entries:
-            print(name)
-        ans = input("save changes?")
+            stdscr.addstr(name)
+        ans = prompt(stdscr, "save changes?")
         if "y" in ans:
             save_entries(conn, cursor, key, entries)
-        cursor.close()
-        conn.close()
+            conn.commit()
+            cursor.close()
+            conn.close()
 
 
 def save_entry(new_entry, entries, changed_entries):
@@ -126,13 +155,13 @@ def save_entry(new_entry, entries, changed_entries):
     found = False
     for i, entry in enumerate(entries):
         if new_entry == entry and new_entry.changed:
-            # REset changed state
+            # Reset changed state
             new_entry.changed = False
             changed_entries.append(new_entry.name)
 
             entries[i] = new_entry
 
-            found = True
+            found = True  # The entry already exists
             break
     if not (found):
         new_entry.changed = False
@@ -141,51 +170,51 @@ def save_entry(new_entry, entries, changed_entries):
         entries.append(new_entry)
 
 
-def set_username(entry):
-    username = input("Enter new username")
+def set_username(stdscr, entry):
+    username = prompt(stdscr, "Enter new username")
     if username == "":
-        input("Username unchanged, press enter to return to entry creation")
+        prompt(stdscr, "Username unchanged, press enter to return to entry creation")
     else:
         entry.username = username
         entry.changed = True
 
 
-def set_password(entry):
+def set_password(stdscr, entry):
     while True:
-        new_password = getpass.getpass("Enter new password")
-        retyped = input("Retype new password")
+        new_password = prompt(stdscr, "Enter new password")
+        retyped = prompt(stdscr, "Retype new password")
         try:
             validate_pass(new_password, retyped)
         except ValueError as e:
-            print(e)
+            prompt(stdscr, e)
             continue
         break
     entry.password = new_password
     entry.changed = True
 
 
-def set_name(entry):
-    name = input("Enter a name for this entry:")
+def set_name(stdscr, entry):
+    name = prompt(stdscr, "Enter a name for this entry:")
     if name == "":
-        input("Name unchanged, press enter to return to entry creation")
+        prompt(stdscr, "Name unchanged, press enter to return to entry creation")
     else:
         entry.name = name
         entry.changed = True
 
 
-def set_email(entry):
-    email = input("Enter an e-mail address")
+def set_email(stdscr, entry):
+    email = prompt(stdscr, "Enter an e-mail address")
     if email == "":
-        input("email unchanged, press enter to return to entry creation")
+        prompt(stdscr, "email unchanged, press enter to return to entry creation")
     else:
         entry.email = email
         entry.changed = True
 
 
-def set_url(entry):
-    url = input("Enter URL:")
+def set_url(stdscr, entry):
+    url = prompt(stdscr, "Enter URL:")
     if url == "":
-        input("URL unchanged, press enter to return to entry creation")
+        prompt(stdscr, "URL unchanged, press enter to return to entry creation")
     else:
         entry.url = url
         entry.changed = True
@@ -199,7 +228,6 @@ def add_or_update(stdscr, entry=None, entries=None, changed_entries=None):
         entry = Entry(None, None, None, None, None, True)
 
     curses.noecho()
-    curses.cbreak()
     stdscr.keypad(True)
     stdscr.clear()
     index = 0
@@ -216,6 +244,7 @@ def add_or_update(stdscr, entry=None, entries=None, changed_entries=None):
         )
         for i, (label, functionin, value) in enumerate(options):
             if i == index:
+                # Mark the currently selected option as highlighted
                 stdscr.addstr(f"* {label}\n", curses.A_REVERSE)
 
             else:
@@ -234,7 +263,6 @@ def add_or_update(stdscr, entry=None, entries=None, changed_entries=None):
         if key == "Key_ENTER" or key == "\n" or key == "\r":
             stdscr.clear()
 
-            curses.endwin()
             option = options[index]
             label, function, value = option
             if label == "Cancel":
@@ -244,11 +272,11 @@ def add_or_update(stdscr, entry=None, entries=None, changed_entries=None):
                 try:
                     save_entry(entry, entries, changed_entries)
                 except ValueError as e:
-                    input(f"Couldn't save entry: {e}")
+                    prompt(stdscr, f"Couldn't save entry: {e}")
                     continue
                 return
             else:
-                function(value)
+                function(stdscr, value)
                 options = generate_editing_options(entry)
 
                 curses.initscr()
@@ -293,16 +321,13 @@ def manage_entries(conn, cursor, dec_key, stdscr, entries):
             if index > 0:
                 index -= 1
         elif key == "Key_ENTER" or key == "\n" or key == "\r":
-            curses.nocbreak()
-            stdscr.keypad(False)
-            curses.endwin()
 
             if index == len(options) - 2:
                 add_or_update(stdscr, None, entries, changed_entries)
                 continue
 
             elif index == len(options) - 1:
-                prompt_save(conn, cursor, dec_key, entries, changed_entries)
+                prompt_save(stdscr, conn, cursor, dec_key, entries, changed_entries)
                 break
             else:
                 entry = options[index]
@@ -326,14 +351,10 @@ def build_entries(cursor, key):
     rows = cursor.fetchall()
 
     for row in rows:
-        name = decrypt(key, row[0].encode())
-        email = decrypt(key, rows[1].encode())
-        username = decrypt(key, row[2].encode())
-        password = decrypt(key, row[3])
-        url = decrypt(key, row[4].encode())
 
-        entry = Entry(name, username, password, email, url, False)
-        entries.append(entry)
+        dec_entry = decrypt_entry(row, key)
+
+        entries.append(dec_entry)
     return entries
 
 
@@ -347,7 +368,7 @@ def encrypt(key, s):
 
 def quit(stdscr):
     print("Goodbye, thanks for trying out my program!")
-    input("Press enter to exit")
+    prompt(stdscr, "Press enter to exit")
     sys.exit(0)
 
 
@@ -397,13 +418,13 @@ def open_db_interactive(stdscr):
             stdscr.refresh()
             curses.endwin()
             if index == 0:
-                path = input("Enter path:")
+                path = prompt(stdscr, "Enter path:")
                 break
             else:
                 path = option
                 break
     while True:
-        password = getpass.getpass("Enter password:")
+        password = prompt(stdscr, "Enter password:")
         try:
             conn, cursor, key = open_db(path, password)
         except ValueError as e:
@@ -419,7 +440,7 @@ def open_db_interactive(stdscr):
 
 def validate_pass(password, retyped_password):
     if password != retyped_password:
-        raise ValueError("Passwords don't amtch")
+        raise ValueError("Passwords don't match")
     if password == "":
         raise ValueError("Password must not be empty")
 
@@ -445,12 +466,13 @@ def generate_key(password, salt=None):
 
 # An interactive  function to take input and run mkdb, which handles database creation.
 def prompt_db(stdscr):
-    input(
-        "On the next screen, you will be asked to select the name and location for your new database.\nPlease press enter to continue."
+    prompt(
+        stdscr,
+        "On the next screen, you will be asked to select the name and location for your new database.\nPlease press enter to continue.",
     )
     name = None
     while not (name):
-        name = input("Enter a name for your new database:")
+        name = prompt(stdscr, "Enter a name for your new database:")
         if not (name):
             print("Name cannot be empty")
         else:
@@ -461,18 +483,18 @@ def prompt_db(stdscr):
         print(
             "There is already a database with that name, do you want to overwrite it?"
         )
-        answer = input("Please type YES in upper case letters to continue")
+        answer = prompt(stdscr, "Please type YES in upper case letters to continue")
         if answer != "YES":
             print("Database creation cancelled")
-            input("Press enter to return to the menu")
+            prompt(stdscr, "Press enter to return to the menu")
             wrapper(main)
         else:
             os.remove(name)
             print("removed " + name)
 
     while True:
-        password = getpass.getpass("Enter the password for your new database.")
-        retyped_password = getpass.getpass("Please enter the same password again:")
+        password = prompt(stdscr, "Enter the password for your new database.")
+        retyped_password = prompt(stdscr, "Please enter the same password again:")
 
         try:
             validate_pass(password, retyped_password)
@@ -481,7 +503,7 @@ def prompt_db(stdscr):
             print(e)
             continue
         else:
-            input("Password set. Press enter.")
+            prompt(stdscr, "Password set. Press enter.")
 
             break
     print("Creating database....")
@@ -490,10 +512,10 @@ def prompt_db(stdscr):
 
     except sqlite3.Error as e:
         print("Error creating database: \n" + str(e))
-        input("Press enter to continue")
+        prompt(stdscr, "Press enter to continue")
         prompt_db()
     print("Successfully created new database")
-    input("Press enter to continue")
+    prompt(stdscr, "Press enter to continue")
 
 
 def mkdb(name, password):
