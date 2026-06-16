@@ -40,6 +40,38 @@ class Entry:
         return self.name
 
 
+def encrypt_entries(conn, cursor, key, entries):
+
+    # recursively encrypt the contents of each entry
+    print(type(key))
+    input()
+
+    for e in entries:
+        # encode each variable into bytes and then encrypt and decode it back into a string, accept for the password
+
+        e.name = encrypt(key, e.name)
+        e.username = encrypt(key, e.username)
+        e.password = encrypt(key, e.password)
+        e.email = encrypt(key, e.email)
+        e.url = encrypt(key, e.url)
+    return entries
+
+
+def save_entries(conn, cursor, key, entries):
+    encrypted_entries = encrypt_entries(conn, cursor, key, entries)
+    for e in entries:
+        cursor.execute(
+            "insert into passwords values(?,?,?,?,?)",
+            (
+                e.name,
+                e.email,
+                e.username,
+                e.password,
+                e.url,
+            ),
+        )
+
+
 def generate_editing_options(entry):
     options = (
         [
@@ -69,9 +101,20 @@ def generate_editing_options(entry):
     return options
 
 
-def prompt_save(cursor, key, entries, changed_entries):
+def prompt_save(conn, cursor, key, entries, changed_entries):
     if not (changed_entries):
+
         cursor.close()
+        conn.close()
+    else:
+        print("You have changed the following entries:\n")
+        for name in changed_entries:
+            print(name)
+        ans = input("save changes?")
+        if "y" in ans:
+            save_entries(conn, cursor, key, entries)
+        cursor.close()
+        conn.close()
 
 
 def save_entry(new_entry, entries, changed_entries):
@@ -212,11 +255,12 @@ def add_or_update(stdscr, entry=None, entries=None, changed_entries=None):
                 continue
 
 
-def manage_entries(cursor, stdscr, entries):
+def manage_entries(conn, cursor, dec_key, stdscr, entries):
     index = 0
     changed_entries = []
     curses.noecho()
     curses.cbreak()
+
     stdscr.keypad(True)
     stdscr.clear()
 
@@ -258,7 +302,7 @@ def manage_entries(cursor, stdscr, entries):
                 continue
 
             elif index == len(options) - 1:
-                prompt_save(cursor, key, entries, changed_entries)
+                prompt_save(conn, cursor, dec_key, entries, changed_entries)
                 break
             else:
                 entry = options[index]
@@ -294,8 +338,11 @@ def build_entries(cursor, key):
 
 
 def encrypt(key, s):
+    if s is None:
+        return None
     fernet = Fernet(key)
-    return fernet.encrypt(s.encode())
+    s = s.encode()
+    return fernet.encrypt(s).decode()
 
 
 def quit(stdscr):
@@ -358,7 +405,7 @@ def open_db_interactive(stdscr):
     while True:
         password = getpass.getpass("Enter password:")
         try:
-            cursor, key = open_db(path, password)
+            conn, cursor, key = open_db(path, password)
         except ValueError as e:
             print(e)
             continue
@@ -367,7 +414,7 @@ def open_db_interactive(stdscr):
             continue
         break
     entries = build_entries(cursor, key)
-    manage_entries(cursor, stdscr, entries)
+    manage_entries(conn, cursor, key, stdscr, entries)
 
 
 def validate_pass(password, retyped_password):
@@ -514,7 +561,7 @@ def open_db(path, password):
     except (cryptography.exceptions.InvalidSignature, cryptography.fernet.InvalidToken):
         raise ValueError("Wrong password")
     if is_unlocked == "true":
-        return (cursor, key)
+        return (conn, cursor, key)
     else:
         raise ValueError("wrong password")
 
