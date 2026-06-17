@@ -11,6 +11,7 @@ import sys
 import sqlite3
 import curses
 from curses import wrapper
+import pyperclip
 
 
 class Entry:
@@ -40,13 +41,77 @@ class Entry:
         return self.name
 
 
+def entry_menu(stdscr, entry, entries, changed_entries):
+    # The following code was generated with the help of cs50's AI which gave me instructions on creating a tuple for functions with different numbers of arguments
+    # The tuple's layout is: label, function, args
+    options = (
+        ("Copy username", cp_username, (entry,)),
+        ("Copy password", cp_pass, (entry,)),
+        (
+            "Edit entry",
+            add_or_update,
+            (stdscr, entry, entries, changed_entries),
+        ),
+    )
+
+    stdscr.keypad(True)
+
+    curses.noecho()
+    index = 0
+    while True:
+        stdscr.clear()
+
+        stdscr.addstr(f"Options menu:\n", curses.A_BOLD)
+
+        for i, (label, function, args) in enumerate(options):
+            if i == index:
+
+                stdscr.addstr(f" * {label}\n", curses.A_REVERSE)
+
+            else:
+                stdscr.addstr(f"{label}\n")
+        stdscr.move(index + 1, 0)
+
+        key = stdscr.getkey()
+        if key == "KEY_DOWN":
+            if index < len(options) - 1:
+                index += 1
+
+        elif key == "KEY_UP":
+            if index > 0:
+                index -= 1
+        elif key == "Key_ENTER" or key == "\n" or key == "\r":
+            option = options[index]
+            label, function, args = option
+
+            # Execute the function
+            function(*args)
+            break
+
+
+def cp_pass(entry):
+    if entry is None:
+        raise ValueError("No entry provided")
+    pyperclip.copy(entry.password)
+
+
+def cp_username(entry):
+    if entry is None:
+        raise ValueError("No entry provided")
+    pyperclip.copy(entry.username)
+
+
+def prompt_delete(stdscr, entry, entries, changed_entries):
+    stdscr.clear()
+    ans = prompt(stdscr, "Delete entry? y/n")
+    if ans == "y":
+        entries.remove(entry)
+
+
 def getpass(stdscr, prompt):
     stdscr.clear()
     stdscr.refresh()
-    # incomplete
-    # Allow curses to interact with keys as soon as they are typed
 
-    curses.cbreak()
     curses.noecho()
 
     password = ""
@@ -62,7 +127,7 @@ def getpass(stdscr, prompt):
         if key.isalpha():
             password += key
         elif key == "\n":
-            curses.nocbreak()
+
             curses.echo()
 
             return password
@@ -118,6 +183,7 @@ def encrypt_entries(conn, cursor, key, entries):
 
 def save_entries(conn, cursor, key, entries):
     encrypted_entries = encrypt_entries(conn, cursor, key, entries)
+    cursor.execute("DELETE FROM passwords")
     for e in entries:
         cursor.execute(
             "insert into passwords values(?,?,?,?,?)",
@@ -170,7 +236,7 @@ def prompt_save(stdscr, conn, cursor, key, entries, changed_entries):
         stdscr.clear()
         stdscr.addstr("You have changed the following entries:\n")
         for name in changed_entries:
-            stdscr.addstr(name)
+            stdscr.addstr(name + "\n")
         ans = prompt(stdscr, "save changes?")
         if "y" in ans:
             save_entries(conn, cursor, key, entries)
@@ -364,8 +430,12 @@ def manage_entries(conn, cursor, dec_key, stdscr, entries):
                 break
             else:
                 entry = options[index]
-                add_or_update(stdscr, entry, entries, changed_entries)
+                entry_menu(stdscr, entry, entries, changed_entries)
+
                 continue
+        if key == "KEY_DC":
+            entry = options[index]
+            prompt_delete(stdscr, entry, entries, changed_entries)
 
 
 def decrypt(key, bytes):
