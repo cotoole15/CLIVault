@@ -40,6 +40,39 @@ class Entry:
         return self.name
 
 
+def getpass(stdscr, prompt):
+    stdscr.clear()
+    stdscr.refresh()
+    # incomplete
+    # Allow curses to interact with keys as soon as they are typed
+
+    curses.cbreak()
+    curses.noecho()
+
+    password = ""
+    key = ""
+
+    stdscr.addstr(prompt + "\n")
+
+    while key != "\n":
+
+        stdscr.clrtoeol()
+
+        key = stdscr.getkey()
+        if key.isalpha():
+            password += key
+        elif key == "\n":
+            curses.nocbreak()
+            curses.echo()
+
+            return password
+        elif key == "KEY_BACKSPACE" or key == "\b" or key == "\x7f":
+            password = password[:-1]
+        stdscr.move(1, 0)
+
+        stdscr.addstr("*" * len(password))
+
+
 def decrypt_entry(row, key):
     if not (row):
         raise ValueError("No row provided")
@@ -181,8 +214,8 @@ def set_username(stdscr, entry):
 
 def set_password(stdscr, entry):
     while True:
-        new_password = prompt(stdscr, "Enter new password")
-        retyped = prompt(stdscr, "Retype new password")
+        new_password = getpass(stdscr, "Enter new password")
+        retyped = getpass(stdscr, "Retype new password")
         try:
             validate_pass(new_password, retyped)
         except ValueError as e:
@@ -367,7 +400,8 @@ def encrypt(key, s):
 
 
 def quit(stdscr):
-    print("Goodbye, thanks for trying out my program!")
+    stdscr.clear()
+    stdscr.addstr("Goodbye, thanks for trying out my program!")
     prompt(stdscr, "Press enter to exit")
     sys.exit(0)
 
@@ -424,14 +458,17 @@ def open_db_interactive(stdscr):
                 path = option
                 break
     while True:
-        password = prompt(stdscr, "Enter password:")
+        password = getpass(stdscr, "Enter password:")
         try:
             conn, cursor, key = open_db(path, password)
         except ValueError as e:
-            print(e)
+            prompt(stdscr, f" {e}\nPress enter to continue")
+            stdscr.clear()
             continue
         except FileNotFoundError:
-            print(e)
+            stdscr.addstr(f"{e} \n press enter to continue")
+            prompt(stdscr, "Press enter to continue")
+
             continue
         break
     entries = build_entries(cursor, key)
@@ -474,47 +511,54 @@ def prompt_db(stdscr):
     while not (name):
         name = prompt(stdscr, "Enter a name for your new database:")
         if not (name):
-            print("Name cannot be empty")
+            stdscr.clear()
+            stdscr.refresh()
+            stdscr.addstr("Name cannot be empty")
+
         else:
             break
 
     name = name + ".db"
     if os.path.exists(name):
-        print(
+
+        stdscr.addstr(
             "There is already a database with that name, do you want to overwrite it?"
         )
         answer = prompt(stdscr, "Please type YES in upper case letters to continue")
         if answer != "YES":
-            print("Database creation cancelled")
-            prompt(stdscr, "Press enter to return to the menu")
+            prompt(
+                stdscr,
+                " Database creation cancelled \nPress enter to return to the menu",
+            )
+            stdscr.clear()
             wrapper(main)
         else:
             os.remove(name)
-            print("removed " + name)
+            stdscr.addstr("removed " + name)
 
     while True:
-        password = prompt(stdscr, "Enter the password for your new database.")
-        retyped_password = prompt(stdscr, "Please enter the same password again:")
+        password = getpass(stdscr, "Enter the password for your new database.")
+        retyped_password = getpass(stdscr, "Please enter the same password again:")
 
         try:
             validate_pass(password, retyped_password)
         except ValueError as e:
 
-            print(e)
+            stdscr.addstr(e)
             continue
         else:
             prompt(stdscr, "Password set. Press enter.")
 
             break
-    print("Creating database....")
+    stdscr.addstr("Creating database....")
     try:
         mkdb(name, password)
 
     except sqlite3.Error as e:
-        print("Error creating database: \n" + str(e))
+        stdscr.addstr("Error creating database: \n" + str(e))
         prompt(stdscr, "Press enter to continue")
         prompt_db()
-    print("Successfully created new database")
+    stdscr.addstr("Successfully created new database")
     prompt(stdscr, "Press enter to continue")
 
 
