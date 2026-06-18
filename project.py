@@ -553,6 +553,8 @@ def validate_pass(password, retyped_password):
 
 
 def generate_key(password, salt=None):
+    if not (password):
+        raise ValueError("No password provided")
 
     # generate a salt if none is provided (random data to make a key stronger)
     # As this function will also be used to retrieve a key from an existing database, salt can be supplied.
@@ -568,7 +570,7 @@ def generate_key(password, salt=None):
     )
     # Cryptography expects a password in bytes, converted below.
     key = kdf.derive(password.encode())
-    return base64.urlsafe_b64encode(key)
+    return base64.b64encode(key)
 
 
 # An interactive  function to take input and run mkdb, which handles database creation.
