@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+# includes
 import base64
 import os
 import glob
@@ -22,6 +22,7 @@ class Entry:
         password=None,
         email=None,
         url=None,
+        # Allows entry validation to be skipped when a new entry is being created.
         creating=False,
         changed=False,
     ):
@@ -54,6 +55,7 @@ def entry_menu(stdscr, entry, entries, changed_entries):
         ),
     )
 
+    # Initailise curses
     stdscr.keypad(True)
 
     curses.noecho()
@@ -65,6 +67,7 @@ def entry_menu(stdscr, entry, entries, changed_entries):
 
         for i, (label, function, args) in enumerate(options):
             if i == index:
+                # Highlight the currently sleected option
 
                 stdscr.addstr(f" * {label}\n", curses.A_REVERSE)
 
@@ -109,6 +112,7 @@ def prompt_delete(stdscr, entry, entries, changed_entries):
 
 
 def getpass(stdscr, prompt):
+    # This is my own getpass function and is not the official one.
     stdscr.clear()
     stdscr.refresh()
 
@@ -117,9 +121,11 @@ def getpass(stdscr, prompt):
     password = ""
     key = ""
 
+    # Shows a visual prompt on screen
     stdscr.addstr(prompt + "\n")
 
     while key != "\n":
+        # Clears the screen
 
         stdscr.clrtoeol()
 
@@ -143,12 +149,13 @@ def decrypt_entry(row, key):
         raise ValueError("No row provided")
     if not (key):
         raise ValueError("NO decryption key provided")
-
+    # Encrypt entry fields
     name = decrypt(key, row[0].encode()) if row[0] else None
     email = decrypt(key, row[1].encode()) if row[1] else None
     username = decrypt(key, row[2].encode()) if row[2] else None
     password = decrypt(key, row[3]) if row[3] else None
     url = decrypt(key, row[4].encode()) if row[4] else None
+    # Create a new Entry instance
     dec_entry = Entry(name, username, password, email, url, False, False)
     return dec_entry
 
@@ -157,6 +164,7 @@ def prompt(stdscr, text):
 
     # Show typed characters
     curses.echo()
+    # Prevent arrow keys from being captured
     stdscr.keypad(False)
 
     stdscr.addstr(text)
@@ -168,7 +176,7 @@ def prompt(stdscr, text):
 
 def encrypt_entries(conn, cursor, key, entries):
 
-    # recursively encrypt the contents of each entry
+    # Encrypt the contents of each entry
 
     for e in entries:
         # encode each variable into bytes and then encrypt and decode it back into a string, accept for the password
@@ -182,7 +190,10 @@ def encrypt_entries(conn, cursor, key, entries):
 
 
 def save_entries(conn, cursor, key, entries):
+
     encrypted_entries = encrypt_entries(conn, cursor, key, entries)
+    # Wipe the passswords table so the values can be reinserted
+    # Note: This approach has several flaws, see ReadMe for details.
     cursor.execute("DELETE FROM passwords")
     for e in entries:
         cursor.execute(
@@ -198,7 +209,8 @@ def save_entries(conn, cursor, key, entries):
 
 
 def generate_editing_options(entry):
-    # This generates the list of entries and exit options to be used by add_or_update
+    # This generates the list of entries and exit options to be used by the add_or_update menu
+    # The layout is label, function, argument
     options = (
         [
             f"Title: {entry.name if entry.name is not None else 'not set'}",
@@ -241,8 +253,8 @@ def prompt_save(stdscr, conn, cursor, key, entries, changed_entries):
         if "y" in ans:
             save_entries(conn, cursor, key, entries)
             conn.commit()
-            cursor.close()
-            conn.close()
+        cursor.close()
+        conn.close()
 
 
 def save_entry(new_entry, entries, changed_entries):
@@ -375,10 +387,10 @@ def add_or_update(stdscr, entry=None, entries=None, changed_entries=None):
                     continue
                 return
             else:
+                # The user chose to edit one of the entry fields
                 function(stdscr, value)
                 options = generate_editing_options(entry)
 
-                curses.initscr()
                 continue
 
 
@@ -426,6 +438,7 @@ def manage_entries(conn, cursor, dec_key, stdscr, entries):
                 continue
 
             elif index == len(options) - 1:
+                # The user chose quit
                 prompt_save(stdscr, conn, cursor, dec_key, entries, changed_entries)
                 break
             else:
@@ -434,6 +447,7 @@ def manage_entries(conn, cursor, dec_key, stdscr, entries):
 
                 continue
         if key == "KEY_DC":
+            # The user pressed the delete key
             entry = options[index]
             prompt_delete(stdscr, entry, entries, changed_entries)
 
@@ -451,9 +465,11 @@ def build_entries(cursor, key):
 
     entries = []
     cursor.execute("SELECT * FROM passwords")
+    # Fetch all results
     rows = cursor.fetchall()
 
     for row in rows:
+        # Decrypt each row and store it in the list of entries
 
         dec_entry = decrypt_entry(row, key)
 
@@ -484,6 +500,7 @@ def open_db_interactive(stdscr):
     options = options + databases
 
     index = 0
+    # The path to a database file
     path = None
     curses.noecho()
     curses.cbreak()
@@ -568,7 +585,7 @@ def generate_key(password, salt=None):
         salt=salt,
         iterations=1_200_000,
     )
-    # Cryptography expects a password in bytes, converted below.
+    # Convert password into bytes for use with cryptography
     key = kdf.derive(password.encode())
     return base64.b64encode(key)
 
@@ -694,6 +711,7 @@ def open_db(path, password):
         WHERE key="is_unlocked";    
     """)
     is_unlocked = cursor.fetchone()[0]
+    # Attempt to decrypt the string true
     try:
         is_unlocked = decrypt(key, is_unlocked)
     except (cryptography.exceptions.InvalidSignature, cryptography.fernet.InvalidToken):
@@ -705,6 +723,8 @@ def open_db(path, password):
 
 
 def main(stdscr):
+    # Source: https://docs.python.org/3/library/curses.html
+
     menu_items = [
         ("Create new database", prompt_db, stdscr),
         ("Open an existing database", open_db_interactive, stdscr),
