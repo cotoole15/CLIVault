@@ -1,6 +1,7 @@
 # CliVault a simple password manager
 #### Video link https://www.dropbox.com/scl/fi/75wnba3x9bimcz6m92kwv/cs50p-project.mp4?rlkey=rnmll76fymmuwt1b2m2sjvzbn&dl=0
-#### Description A simple secure password manager with the ability to create, modify and delete entries, using secure encryption from python's fernet module.
+#### Description 
+A simple secure password manager with the ability to create, modify and delete entries, using secure encryption from python's fernet module.
     
 ## Introduction
 Cli Vault is a simple password manager with the ability to manage credentials and store them securely in a database. It supports entry creation, deletion and copying of usernames and passwords. It prompts the user to save or discard their changes on exit, protecting the database from accidental modification.
