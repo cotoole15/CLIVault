@@ -54,6 +54,11 @@ def entry_menu(stdscr, entry, entries, changed_entries):
             (stdscr, entry, entries, changed_entries),
         ),
         (
+            "delete entry",
+            prompt_delete,
+            (stdscr, entry, entries, changed_entries),
+        ),
+        (
             "back",
             None,
             (None),
@@ -203,7 +208,7 @@ def save_entries(conn, cursor, key, entries):
 
     encrypted_entries = encrypt_entries(conn, cursor, key, entries)
     # Wipe the passswords table so the values can be reinserted
-    # Note: This approach has several flaws, see ReadMe for details.
+    # Note: this paproach is not efficient, see ReadMe for details.
     cursor.execute("DELETE FROM passwords")
     for e in entries:
         cursor.execute(
