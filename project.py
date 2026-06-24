@@ -77,7 +77,7 @@ def entry_menu(stdscr, entry, entries, changed_entries):
 
         for i, (label, function, args) in enumerate(options):
             if i == index:
-                # Highlight the currently seleected option
+                # Highlight the currently selected option
 
                 stdscr.addstr(f" * {label}\n", curses.A_REVERSE)
 
