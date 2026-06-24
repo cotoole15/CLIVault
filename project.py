@@ -53,9 +53,14 @@ def entry_menu(stdscr, entry, entries, changed_entries):
             add_or_update,
             (stdscr, entry, entries, changed_entries),
         ),
+        (
+            "back",
+            None,
+            (None),
+        ),
     )
 
-    # Initailise curses
+    # Initialise curses
     stdscr.keypad(True)
 
     curses.noecho()
@@ -67,7 +72,7 @@ def entry_menu(stdscr, entry, entries, changed_entries):
 
         for i, (label, function, args) in enumerate(options):
             if i == index:
-                # Highlight the currently sleected option
+                # Highlight the currently seleected option
 
                 stdscr.addstr(f" * {label}\n", curses.A_REVERSE)
 
@@ -84,8 +89,11 @@ def entry_menu(stdscr, entry, entries, changed_entries):
             if index > 0:
                 index -= 1
         elif key == "Key_ENTER" or key == "\n" or key == "\r":
+
             option = options[index]
             label, function, args = option
+            if label == "back":
+                break
 
             # Execute the function
             function(*args)
@@ -166,6 +174,8 @@ def prompt(stdscr, text):
     curses.echo()
     # Prevent arrow keys from being captured
     stdscr.keypad(False)
+    if isinstance(text, ValueError):
+        text = str(text)
 
     stdscr.addstr(text)
     typed_text = stdscr.getstr().decode()
@@ -633,7 +643,8 @@ def prompt_db(stdscr):
             validate_pass(password, retyped_password)
         except ValueError as e:
 
-            stdscr.addstr(e)
+            stdscr.addstr(str(e) + "\n")
+            prompt(stdscr, "press enter to continue")
             continue
         else:
             prompt(stdscr, "Password set. Press enter.")
@@ -647,7 +658,7 @@ def prompt_db(stdscr):
         stdscr.addstr("Error creating database: \n" + str(e))
         prompt(stdscr, "Press enter to continue")
         prompt_db()
-    stdscr.addstr("Successfully created new database")
+    stdscr.addstr("Successfully created new database\n")
     prompt(stdscr, "Press enter to continue")
 
 
