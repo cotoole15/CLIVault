@@ -1,5 +1,7 @@
 # CliVault a simple password manager
 ## Video link https://www.dropbox.com/scl/fi/75wnba3x9bimcz6m92kwv/cs50p-project.mp4?rlkey=rnmll76fymmuwt1b2m2sjvzbn&dl=0
+## Warning
+This project was made to enhance my skills with respect to encryption, database management and other topics. It should not be used in a production environment. 
 ## Description 
 A simple secure password manager with the ability to create, modify and delete entries, using secure encryption from python's fernet module.
 
